@@ -33,6 +33,8 @@ export function selectDefaultKeep(items: GpdMediaItem[]): string {
       (b.resWidth ?? 0) * (b.resHeight ?? 0) -
       (a.resWidth ?? 0) * (a.resHeight ?? 0);
     if (pxDiff !== 0) return pxDiff;
+    const sizeDiff = (b.size ?? 0) - (a.size ?? 0);
+    if (sizeDiff !== 0) return sizeDiff;
     return (a.creationTimestamp ?? 0) - (b.creationTimestamp ?? 0);
   });
   return best[0].mediaKey;

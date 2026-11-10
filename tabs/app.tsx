@@ -363,6 +363,16 @@ export default function App() {
               // Optimistic restore already happened in UI; show a non-blocking alert
               console.error("GPD: Restore failed:", result.error)
             }
+          } else if (result.command === "getExtendedMediaInfo") {
+            if (result.success) {
+              const data = result.data as { infoMap?: Record<string, Partial<GpdMediaItem>> }
+              if (data?.infoMap && Object.keys(data.infoMap).length > 0) {
+                dispatch({
+                  type: "MERGE_EXTENDED_MEDIA_INFO",
+                  infoMap: data.infoMap
+                })
+              }
+            }
           }
           break
         }
@@ -774,6 +784,17 @@ export default function App() {
     })
   }, [undoData])
 
+  const handleRequestExtendedInfo = useCallback((mediaKeys: string[]) => {
+    if (mediaKeys.length === 0) return
+    sendToServiceWorker({
+      app: APP_ID,
+      action: "gptkCommand",
+      command: "getExtendedMediaInfo",
+      requestId: generateRequestId(),
+      args: { mediaKeys }
+    })
+  }, [])
+
   // Compute duplicate count for ActionBar
   const duplicateCount =
     state.status === "results"
@@ -899,6 +920,7 @@ export default function App() {
               keptByGroupId={keptByGroupId}
               onToggleKept={handleToggleKept}
               onTrashWholeGroup={handleTrashWholeGroup}
+              onRequestExtendedInfo={handleRequestExtendedInfo}
               bucketsSplit={state.bucketsSplit}
             />
           </>

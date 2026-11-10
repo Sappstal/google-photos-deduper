@@ -12,14 +12,35 @@ import Paper from "@mui/material/Paper"
 import Skeleton from "@mui/material/Skeleton"
 import Typography from "@mui/material/Typography"
 import OpenInFullIcon from "@mui/icons-material/OpenInFull"
+import OpenInNewIcon from "@mui/icons-material/OpenInNew"
 import StarIcon from "@mui/icons-material/Star"
 import DeleteSweepIcon from "@mui/icons-material/DeleteSweep"
+import PlaceIcon from "@mui/icons-material/Place"
+import FolderSpecialIcon from "@mui/icons-material/FolderSpecial"
 import Tooltip from "@mui/material/Tooltip"
 import { useBlobUrl } from "./useBlobUrl"
 import { PhotoViewerModal } from "./PhotoViewerModal"
 import { buildThumbUrl } from "../lib/photo-url"
 import type { GpdMediaItem, DuplicateGroup } from "../lib/types"
 import { isWholeGroupTrashed } from "../lib/kept-overrides"
+
+function formatBytes(bytes?: number): string | null {
+  if (bytes === undefined || bytes === null || !Number.isFinite(bytes) || bytes <= 0) return null
+  if (bytes < 1024) return `${bytes} B`
+  const kb = bytes / 1024
+  if (kb < 1024) return `${kb.toFixed(1)} KB`
+  const mb = kb / 1024
+  if (mb < 1024) return `${mb.toFixed(2)} MB`
+  return `${(mb / 1024).toFixed(2)} GB`
+}
+
+function formatLocation(item: GpdMediaItem): string | null {
+  if (item.locationName) return item.locationName
+  if (item.coordinates && item.coordinates.length === 2) {
+    return `${item.coordinates[0].toFixed(4)}, ${item.coordinates[1].toFixed(4)}`
+  }
+  return null
+}
 
 const PAGE_SIZE = 30
 
@@ -64,13 +85,13 @@ const sxChipSimilarity = { fontSize: 11 }
 const sxThumbnailsWrapper = { display: "flex", flexWrap: "wrap", gap: 1.5, p: 1.5 }
 const sxItemWrapper = {
   position: "relative",
-  width: 160,
+  width: 220,
   flexShrink: 0,
   "& .viewer-btn": { opacity: 0 },
   "&:hover .viewer-btn": { opacity: 1 },
 }
-const sxCardBase = { width: "100%", transition: "border-color 0.15s" }
-const sxCardContent = { p: 1, "&:last-child": { pb: 1 }, display: "flex", flexDirection: "column", gap: 0.5 }
+const sxCardBase = { width: "100%", transition: "border-color 0.15s, opacity 0.15s" }
+const sxCardContent = { p: 1, "&:last-child": { pb: 1 }, display: "flex", flexDirection: "column", gap: 0.4 }
 const sxViewerBtn = {
   position: "absolute",
   top: 4,
@@ -78,8 +99,19 @@ const sxViewerBtn = {
   bgcolor: "rgba(0,0,0,0.45)",
   color: "white",
   transition: "opacity 0.15s",
-  minWidth: 32,
-  minHeight: 32,
+  minWidth: 30,
+  minHeight: 30,
+  "&:hover": { bgcolor: "rgba(0,0,0,0.65)" },
+}
+const sxExternalLinkBtn = {
+  position: "absolute",
+  top: 4,
+  right: 38,
+  bgcolor: "rgba(0,0,0,0.45)",
+  color: "white",
+  transition: "opacity 0.15s",
+  minWidth: 30,
+  minHeight: 30,
   "&:hover": { bgcolor: "rgba(0,0,0,0.65)" },
 }
 const sxOpenInFullIcon = { fontSize: 14 }
@@ -242,36 +274,62 @@ const DuplicateGroupRow = memo(function DuplicateGroupRow({
                     alt={item.fileName || item.mediaKey}
                   />
                   <CardContent sx={sxCardContent}>
-                    {item.fileName && (
-                      <Typography
-                        variant="caption"
-                        display="block"
-                        noWrap
-                        title={item.fileName}>
-                        {item.fileName}
-                      </Typography>
-                    )}
-                    {item.resWidth && item.resHeight && (
-                      <Typography
-                        variant="caption"
-                        color="text.secondary"
-                        sx={{ fontFamily: "monospace" }}>
-                        {item.resWidth}×{item.resHeight}
-                      </Typography>
-                    )}
+                    <Typography
+                      variant="caption"
+                      fontWeight={600}
+                      display="block"
+                      noWrap
+                      title={item.fileName || item.mediaKey}>
+                      {item.fileName || "Loading filename..."}
+                    </Typography>
+
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" }}>
+                      {item.resWidth && item.resHeight && (
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          sx={{ fontFamily: "monospace", fontSize: 11 }}>
+                          {item.resWidth}×{item.resHeight}
+                        </Typography>
+                      )}
+                      {formatBytes(item.size) && (
+                        <Chip
+                          label={formatBytes(item.size)}
+                          size="small"
+                          variant="outlined"
+                          sx={{ height: 18, fontSize: 10, fontFamily: "monospace", "& .MuiChip-label": { px: 0.75 } }}
+                        />
+                      )}
+                      {item.isOriginalQuality !== null && item.isOriginalQuality !== undefined && (
+                        <Chip
+                          label={item.isOriginalQuality ? "Original" : "Storage Saver"}
+                          size="small"
+                          color={item.isOriginalQuality ? "success" : "default"}
+                          variant="outlined"
+                          sx={{ height: 18, fontSize: 10, "& .MuiChip-label": { px: 0.6 } }}
+                        />
+                      )}
+                    </Box>
+
                     {item.timestamp ? (
-                      <Typography variant="caption" color="text.secondary" display="block">
-                        <span style={{ opacity: 0.6 }}>Taken </span>
+                      <Typography variant="caption" color="text.secondary" display="block" sx={{ fontSize: 11 }}>
+                        <span style={{ opacity: 0.65 }}>Taken </span>
                         {new Date(item.timestamp).toLocaleDateString(undefined, {
                           year: "numeric",
                           month: "short",
                           day: "numeric",
-                        })}
+                        })}{" "}
+                        <span style={{ opacity: 0.7 }}>
+                          {new Date(item.timestamp).toLocaleTimeString(undefined, {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </span>
                       </Typography>
                     ) : null}
                     {item.creationTimestamp ? (
-                      <Typography variant="caption" color="text.secondary" display="block">
-                        <span style={{ opacity: 0.6 }}>Uploaded </span>
+                      <Typography variant="caption" color="text.secondary" display="block" sx={{ fontSize: 11 }}>
+                        <span style={{ opacity: 0.65 }}>Uploaded </span>
                         {new Date(item.creationTimestamp).toLocaleDateString(undefined, {
                           year: "numeric",
                           month: "short",
@@ -279,23 +337,74 @@ const DuplicateGroupRow = memo(function DuplicateGroupRow({
                         })}
                       </Typography>
                     ) : null}
-                    {isKept ? (
-                      <Chip
-                        label="Keep"
-                        size="small"
-                        color="primary"
-                        variant="outlined"
-                        sx={sxStatusChip}
-                      />
-                    ) : isSelected ? (
-                      <Chip
-                        label="Trash"
-                        size="small"
-                        color="error"
-                        variant="outlined"
-                        sx={sxStatusChip}
-                      />
-                    ) : null}
+
+                    {/* Location */}
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 0.4, minWidth: 0 }}>
+                      <PlaceIcon sx={{ fontSize: 12, color: formatLocation(item) ? "primary.main" : "text.disabled", flexShrink: 0 }} />
+                      <Typography
+                        variant="caption"
+                        color={formatLocation(item) ? "text.primary" : "text.disabled"}
+                        noWrap
+                        sx={{ fontSize: 11 }}
+                        title={formatLocation(item) || "No GPS location"}>
+                        {formatLocation(item) || "No GPS location"}
+                      </Typography>
+                    </Box>
+
+                    {/* Albums */}
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 0.4, flexWrap: "wrap", mt: 0.2 }}>
+                      <FolderSpecialIcon sx={{ fontSize: 12, color: item.albums?.length ? "secondary.main" : "text.disabled", flexShrink: 0 }} />
+                      {item.albums && item.albums.length > 0 ? (
+                        item.albums.map((albumTitle) => (
+                          <Chip
+                            key={albumTitle}
+                            label={albumTitle}
+                            size="small"
+                            color="secondary"
+                            variant="outlined"
+                            title={albumTitle}
+                            sx={{
+                              height: 18,
+                              fontSize: 10,
+                              maxWidth: 185,
+                              "& .MuiChip-label": { px: 0.75, overflow: "hidden", textOverflow: "ellipsis" },
+                            }}
+                          />
+                        ))
+                      ) : (
+                        <Typography variant="caption" color="text.disabled" sx={{ fontSize: 11 }}>
+                          {item.extLoaded ? "No album (Main Library)" : "Loading albums..."}
+                        </Typography>
+                      )}
+                      {item.isArchived && (
+                        <Chip
+                          label="Archived"
+                          size="small"
+                          variant="outlined"
+                          sx={{ height: 18, fontSize: 10, "& .MuiChip-label": { px: 0.6 } }}
+                        />
+                      )}
+                    </Box>
+
+                    <Box sx={{ pt: 0.4 }}>
+                      {isKept ? (
+                        <Chip
+                          label="Keep"
+                          size="small"
+                          color="primary"
+                          variant="outlined"
+                          sx={sxStatusChip}
+                        />
+                      ) : isSelected ? (
+                        <Chip
+                          label="Trash"
+                          size="small"
+                          color="error"
+                          variant="outlined"
+                          sx={sxStatusChip}
+                        />
+                      ) : null}
+                    </Box>
                   </CardContent>
                 </CardActionArea>
               </Card>
@@ -315,11 +424,29 @@ const DuplicateGroupRow = memo(function DuplicateGroupRow({
                 </Box>
               )}
 
+              {/* Open in Google Photos button */}
+              {item.productUrl && (
+                <IconButton
+                  className="viewer-btn"
+                  size="small"
+                  component="a"
+                  href={item.productUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="Open in Google Photos"
+                  title="Open in Google Photos"
+                  onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                  sx={sxExternalLinkBtn}>
+                  <OpenInNewIcon sx={sxOpenInFullIcon} />
+                </IconButton>
+              )}
+
               {/* Zoom overlay — secondary action, does not trigger Keep toggle */}
               <IconButton
                 className="viewer-btn"
                 size="small"
                 aria-label="View full size"
+                title="View full size"
                 onClick={(e) => {
                   e.stopPropagation()
                   onOpenViewer(group, itemIndex)
@@ -343,6 +470,7 @@ interface DuplicateGroupsProps {
   keptByGroupId: Map<string, Set<string>>
   onToggleKept: (group: DuplicateGroup, mediaKey: string) => void
   onTrashWholeGroup: (group: DuplicateGroup) => void
+  onRequestExtendedInfo?: (mediaKeys: string[]) => void
   /**
    * Timestamp buckets split during the scan to keep pairwise comparison
    * bounded. Above zero, results are incomplete and we say so.
@@ -358,6 +486,7 @@ export function DuplicateGroups({
   keptByGroupId,
   onToggleKept,
   onTrashWholeGroup,
+  onRequestExtendedInfo,
   bucketsSplit = 0,
 }: DuplicateGroupsProps) {
   // Measure time from first non-empty groups render to commit
@@ -390,6 +519,26 @@ export function DuplicateGroups({
 
   // Reset pagination when groups change (new scan)
   useEffect(() => { setVisibleCount(PAGE_SIZE) }, [groups])
+
+  // Request extended metadata (real fileName, size in MB, GPS location, Albums) for visible groups
+  const requestedExtKeysRef = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    if (!onRequestExtendedInfo || groups.length === 0) return
+    const visibleGroups = groups.slice(0, visibleCount + 15)
+    const keysToFetch: string[] = []
+    for (const g of visibleGroups) {
+      for (const k of g.mediaKeys) {
+        const item = mediaItems[k]
+        if (item && !item.extLoaded && !requestedExtKeysRef.current.has(k)) {
+          requestedExtKeysRef.current.add(k)
+          keysToFetch.push(k)
+        }
+      }
+    }
+    if (keysToFetch.length > 0) {
+      onRequestExtendedInfo(keysToFetch)
+    }
+  }, [groups, visibleCount, mediaItems, onRequestExtendedInfo])
 
   // Infinite scroll: observe sentinel once per groups identity.
   // Functional setState needs no visibleCount in the closure.

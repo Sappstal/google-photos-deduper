@@ -15,8 +15,28 @@ import ChevronRightIcon from "@mui/icons-material/ChevronRight"
 import CloseIcon from "@mui/icons-material/Close"
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline"
 import OpenInNewIcon from "@mui/icons-material/OpenInNew"
+import PlaceIcon from "@mui/icons-material/Place"
+import FolderSpecialIcon from "@mui/icons-material/FolderSpecial"
 import { buildThumbUrl } from "../lib/photo-url"
 import type { GpdMediaItem } from "../lib/types"
+
+function formatBytes(bytes?: number): string | null {
+  if (bytes === undefined || bytes === null || !Number.isFinite(bytes) || bytes <= 0) return null
+  if (bytes < 1024) return `${bytes} B`
+  const kb = bytes / 1024
+  if (kb < 1024) return `${kb.toFixed(1)} KB`
+  const mb = kb / 1024
+  if (mb < 1024) return `${mb.toFixed(2)} MB`
+  return `${(mb / 1024).toFixed(2)} GB`
+}
+
+function formatLocation(item: GpdMediaItem): string | null {
+  if (item.locationName) return item.locationName
+  if (item.coordinates && item.coordinates.length === 2) {
+    return `${item.coordinates[0].toFixed(4)}, ${item.coordinates[1].toFixed(4)}`
+  }
+  return null
+}
 
 /**
  * Sizes a thumbnail URL to the current viewport (not necessarily the source
@@ -303,7 +323,7 @@ export function PhotoViewerModal({
           <Typography
             variant="caption"
             noWrap
-            sx={{ color: "rgba(255,255,255,0.45)" }}>
+            sx={{ color: "rgba(255,255,255,0.85)", fontWeight: 600 }}>
             {item.fileName || ""}
           </Typography>
         </Box>
@@ -409,22 +429,78 @@ export function PhotoViewerModal({
           borderTop: "1px solid rgba(255,255,255,0.1)",
         }}>
         {/* Metadata */}
-        <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap", flex: 1 }}>
+        <Box sx={{ display: "flex", gap: 2, alignItems: "center", flexWrap: "wrap", flex: 1 }}>
           {item.resWidth && item.resHeight && (
-            <Typography variant="caption" sx={{ color: "rgba(255,255,255,0.6)", fontFamily: "monospace" }}>
+            <Typography variant="caption" sx={{ color: "rgba(255,255,255,0.7)", fontFamily: "monospace" }}>
               {item.resWidth}×{item.resHeight}
             </Typography>
           )}
+          {formatBytes(item.size) && (
+            <Chip
+              label={formatBytes(item.size)}
+              size="small"
+              variant="outlined"
+              sx={{
+                height: 20,
+                fontSize: 11,
+                fontFamily: "monospace",
+                borderColor: "rgba(255,255,255,0.3)",
+                color: "rgba(255,255,255,0.85)",
+              }}
+            />
+          )}
+          {item.isOriginalQuality !== null && item.isOriginalQuality !== undefined && (
+            <Chip
+              label={item.isOriginalQuality ? "Original Quality" : "Storage Saver"}
+              size="small"
+              variant="outlined"
+              sx={{
+                height: 20,
+                fontSize: 11,
+                borderColor: item.isOriginalQuality ? "rgba(104,211,145,0.7)" : "rgba(255,255,255,0.3)",
+                color: item.isOriginalQuality ? "rgba(104,211,145,1)" : "rgba(255,255,255,0.75)",
+              }}
+            />
+          )}
           {takenDate && (
-            <Typography variant="caption" sx={{ color: "rgba(255,255,255,0.6)" }}>
+            <Typography variant="caption" sx={{ color: "rgba(255,255,255,0.7)" }}>
               <span style={{ opacity: 0.6 }}>Taken </span>{takenDate}
             </Typography>
           )}
           {uploadedDate && (
-            <Typography variant="caption" sx={{ color: "rgba(255,255,255,0.6)" }}>
+            <Typography variant="caption" sx={{ color: "rgba(255,255,255,0.7)" }}>
               <span style={{ opacity: 0.6 }}>Uploaded </span>{uploadedDate}
             </Typography>
           )}
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+            <PlaceIcon sx={{ fontSize: 14, color: formatLocation(item) ? "#63b3ed" : "rgba(255,255,255,0.35)" }} />
+            <Typography variant="caption" sx={{ color: formatLocation(item) ? "rgba(255,255,255,0.85)" : "rgba(255,255,255,0.4)" }}>
+              {formatLocation(item) || "No GPS location"}
+            </Typography>
+          </Box>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, flexWrap: "wrap" }}>
+            <FolderSpecialIcon sx={{ fontSize: 14, color: item.albums?.length ? "#b794f4" : "rgba(255,255,255,0.35)" }} />
+            {item.albums && item.albums.length > 0 ? (
+              item.albums.map((albumTitle) => (
+                <Chip
+                  key={albumTitle}
+                  label={albumTitle}
+                  size="small"
+                  variant="outlined"
+                  sx={{
+                    height: 20,
+                    fontSize: 11,
+                    borderColor: "rgba(183,148,244,0.7)",
+                    color: "rgba(214,188,250,1)",
+                  }}
+                />
+              ))
+            ) : (
+              <Typography variant="caption" sx={{ color: "rgba(255,255,255,0.4)" }}>
+                {item.extLoaded ? "No album (Main Library)" : "Loading albums..."}
+              </Typography>
+            )}
+          </Box>
         </Box>
 
         {/* Keep/Trash chip */}

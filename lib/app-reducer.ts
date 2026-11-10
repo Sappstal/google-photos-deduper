@@ -90,6 +90,10 @@ export type AppAction =
       groups: DuplicateGroup[]
       totalItems: number
     }
+  | {
+      type: "MERGE_EXTENDED_MEDIA_INFO"
+      infoMap: Record<string, Partial<GpdMediaItem>>
+    }
   | { type: "GP_TAB_CLOSED" }
   | { type: "RESET" }
 
@@ -244,6 +248,31 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         bucketsSplit: "bucketsSplit" in state ? state.bucketsSplit : 0,
         accountEmail: "accountEmail" in state ? state.accountEmail : undefined,
       }
+
+    case "MERGE_EXTENDED_MEDIA_INFO": {
+      if (state.status !== "results" && state.status !== "trashing") return state
+      let changed = false
+      const nextMediaItems = { ...state.mediaItems }
+      for (const [key, patch] of Object.entries(action.infoMap)) {
+        const existing = nextMediaItems[key]
+        if (!existing) continue
+        changed = true
+        nextMediaItems[key] = {
+          ...existing,
+          ...patch,
+          fileName: patch.fileName || existing.fileName,
+          locationName: patch.locationName || existing.locationName,
+          coordinates: patch.coordinates || existing.coordinates,
+          albums: patch.albums ?? existing.albums,
+          extLoaded: true,
+        }
+      }
+      if (!changed) return state
+      return {
+        ...state,
+        mediaItems: nextMediaItems,
+      }
+    }
 
     case "GP_TAB_CLOSED":
       return {

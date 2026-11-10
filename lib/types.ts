@@ -196,8 +196,15 @@ export interface GpdMediaItem {
   resHeight?: number;
   fileName?: string;
   size?: number;
+  spaceTaken?: number;
+  takesUpSpace?: boolean | null;
+  isArchived?: boolean;
   isOwned?: boolean;
   isOriginalQuality?: boolean | null;
+  locationName?: string;
+  coordinates?: [number, number];
+  albums?: string[];
+  extLoaded?: boolean;
   /**
    * Whether the user starred this item in Google Photos. Google omits the
    * underlying field rather than sending false, so absent means "not

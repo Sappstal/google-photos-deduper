@@ -146,6 +146,14 @@ async function getAllMediaItems(requestId, args) {
       }
       if (page.items && page.items.length > 0) {
         for (const item of page.items) {
+          const coords = item.geoLocation?.coordinates
+          const validCoords =
+            Array.isArray(coords) &&
+            coords.length === 2 &&
+            typeof coords[0] === "number" &&
+            typeof coords[1] === "number"
+              ? coords
+              : undefined
           mediaItems.push({
             mediaKey: item.mediaKey,
             dedupKey: item.dedupKey,
@@ -156,11 +164,14 @@ async function getAllMediaItems(requestId, args) {
             resHeight: item.resHeight,
             duration: item.duration,
             isOwned: item.isOwned,
+            isArchived: item.isArchived === true,
             isOriginalQuality: item.isOriginalQuality ?? null,
             // GPTK omits this rather than sending false; normalise to a boolean
             // so downstream keep-selection can test it plainly.
             isFavorite: item.isFavorite === true,
             fileName: item.descriptionShort || null,
+            locationName: item.geoLocation?.name || undefined,
+            coordinates: validCoords,
             productUrl: "https://photos.google.com" + accountUrlPrefix + "photo/" + item.mediaKey
           })
         }
@@ -299,6 +310,116 @@ async function restoreItems(requestId, args) {
 }
 
 // ============================================================
+// Command: getExtendedMediaInfo
+// Fetches real fileName, size (bytes), spaceTaken, quality,
+// GPS location, and Album memberships via EWgK9e + fDcn4b.
+// ============================================================
+
+async function getExtendedMediaInfo(requestId, args) {
+  const gptkApi = window.gptkApi
+  if (!gptkApi) {
+    postError(
+      "getExtendedMediaInfo",
+      requestId,
+      "GPTK API not available. Reload the Google Photos page."
+    )
+    return
+  }
+
+  try {
+    const mediaKeys = Array.isArray(args?.mediaKeys) ? args.mediaKeys : []
+    const infoMap = {}
+
+    if (mediaKeys.length === 0) {
+      postResult("getExtendedMediaInfo", requestId, { infoMap })
+      return
+    }
+
+    // 1. Fast batch call (EWgK9e) for fileName, size, spaceTaken, isOriginalQuality
+    const batchChunks = chunkArray(mediaKeys, 100)
+    for (const chunk of batchChunks) {
+      try {
+        const batchData = await gptkApi.getBatchMediaInfo(chunk)
+        if (Array.isArray(batchData)) {
+          for (const entry of batchData) {
+            if (!entry?.mediaKey) continue
+            infoMap[entry.mediaKey] = {
+              ...(infoMap[entry.mediaKey] || {}),
+              ...(entry.fileName ? { fileName: entry.fileName } : {}),
+              ...(typeof entry.size === "number" ? { size: entry.size } : {}),
+              ...(typeof entry.spaceTaken === "number"
+                ? { spaceTaken: entry.spaceTaken }
+                : {}),
+              ...(entry.takesUpSpace !== undefined
+                ? { takesUpSpace: entry.takesUpSpace }
+                : {}),
+              ...(entry.isOriginalQuality !== undefined
+                ? { isOriginalQuality: entry.isOriginalQuality }
+                : {})
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("[GPD] getBatchMediaInfo error:", err)
+      }
+    }
+
+    // 2. Detailed per-item call (fDcn4b) for Albums, GPS location, and fallback fileName/size
+    const CONCURRENCY = 6
+    const queue = [...mediaKeys]
+    const workers = Array.from({ length: Math.min(CONCURRENCY, queue.length) }, async () => {
+      while (queue.length > 0) {
+        const mediaKey = queue.shift()
+        if (!mediaKey) break
+        try {
+          const ext = await gptkApi.getItemInfoExt(mediaKey)
+          if (!ext) continue
+          const current = infoMap[mediaKey] || {}
+          const coords = ext.geoLocation?.coordinates
+          const validCoords =
+            Array.isArray(coords) &&
+            coords.length === 2 &&
+            typeof coords[0] === "number" &&
+            typeof coords[1] === "number"
+              ? coords
+              : undefined
+
+          const albumTitles = Array.isArray(ext.albums)
+            ? ext.albums
+                .map((a) => a?.title || a?.name || (a?.isShared ? "Shared album" : null))
+                .filter(Boolean)
+            : []
+
+          infoMap[mediaKey] = {
+            ...current,
+            ...(ext.fileName ? { fileName: ext.fileName } : {}),
+            ...(typeof ext.size === "number" ? { size: ext.size } : {}),
+            ...(typeof ext.spaceTaken === "number" ? { spaceTaken: ext.spaceTaken } : {}),
+            ...(ext.takesUpSpace !== undefined ? { takesUpSpace: ext.takesUpSpace } : {}),
+            ...(ext.isOriginalQuality !== undefined && ext.isOriginalQuality !== null
+              ? { isOriginalQuality: ext.isOriginalQuality }
+              : {}),
+            ...(ext.geoLocation?.name ? { locationName: ext.geoLocation.name } : {}),
+            ...(validCoords ? { coordinates: validCoords } : {}),
+            ...(ext.resWidth ? { resWidth: ext.resWidth } : {}),
+            ...(ext.resHeight ? { resHeight: ext.resHeight } : {}),
+            albums: Array.from(new Set(albumTitles)),
+            extLoaded: true
+          }
+        } catch (err) {
+          console.warn("[GPD] getItemInfoExt error for", mediaKey, err)
+        }
+      }
+    })
+
+    await Promise.all(workers)
+    postResult("getExtendedMediaInfo", requestId, { infoMap })
+  } catch (error) {
+    postError("getExtendedMediaInfo", requestId, error)
+  }
+}
+
+// ============================================================
 // Command: healthCheck
 // Verifies GPTK is loaded and WIZ_global_data is available.
 // ============================================================
@@ -332,6 +453,9 @@ window.addEventListener("message", async (event) => {
       break
     case "restoreItems":
       await restoreItems(requestId, args)
+      break
+    case "getExtendedMediaInfo":
+      await getExtendedMediaInfo(requestId, args)
       break
     case "healthCheck":
       healthCheck(requestId)
